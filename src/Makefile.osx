@@ -1,0 +1,68 @@
+MPF90 = mpif90
+RM    = rm -rf
+
+INCLUDE     = -I/opt/local/include -I$(PREFIX)/include
+MPI_LINK    = -L/opt/local/lib -L$(PREFIX)/lib -lscalapack -lcfitsio -lfftw3 -lhealpix -llapack
+SERIAL_LINK = -L/opt/local/lib -L$(PREFIX)/lib -lcfitsio -lfftw3 -lhealpix -llapack
+
+.PRECIOUS : %.o
+.SECONDARY :
+
+#F90FLAGS += -g -fopenmp
+CFLAGS += -fopenmp
+
+F90FLAGS = -O0 -fbounds-check -Wall -pedantic -fbacktrace -fdump-core -fopenmp
+#F90FLAGS = -O0 -Mbounds
+
+SERIAL_UTIL = covmat_util.o fourier_fftw.o partrans.o downgrade.o covmat_c_util.o
+MPI_UTIL = scalapack_tools.o covmat_util.o fourier_fftw.o partrans.o downgrade.o covmat_c_util.o
+
+SERIAL_BINARIES = covmat2fits plot_pixel_covariance covmat2block \
+	merge_covmat merge_blocks invert_covmat invert_harmonic_covmat \
+	harmonic2bias chisq chisq_harmonic \
+	downgrade_map evecs2bias merge_interlaced_blocks scale_covmat \
+	mask_covmat add_to_diagonal invert_covmat_sparse cc2covmat \
+	chisq_mc chisq_evecs downgrade_evecs covmat2block_sparse \
+	generate_noisemap evecs2covmat evecs2sqrtcovmat \
+	generate_whitenoisemap project_bad_eigenmode \
+	remove_temperature plot_pixel_covariance_sparse \
+	mapstats downgrade_covmat_diagonal nobs2rcond covmat2commander \
+	extract_diagonal scale_map diff_map add_maps map2mask
+
+MPI_BINARIES = 	merge_covmat_mpi merge_covmat_sparse_mpi covmatmul_mpi \
+	merge_blocks_mpi covmat2block_mpi evecs2covmat_mpi invert_covmat_mpi \
+	downgrade_evecs_mpi evecs2bias_mpi generate_noisemap_mpi add_covmat_mpi \
+	covmat2harmonic_mpi
+
+serial : $(SERIAL_UTIL) $(SERIAL_BINARIES)
+mpi : $(MPI_UTIL) $(MPI_BINARIES)
+
+all : serial mpi
+
+install : all
+	mkdir -p $(PREFIX)/covmat_tools/bin
+	cp $(ALL_BINARIES) $(PREFIX)/covmat_tools/bin
+
+%_mpi : $(MPI_UTIL) %_mpi.o
+	$(MPF90) $(F90FLAGS) -o $* $*_mpi.o $(MPI_UTIL) $(MPI_LINK) $(LDFLAGS)
+
+% : $(SERIAL_UTIL) %.o
+	$(FC) $(F90FLAGS) -o $* $*.o $(SERIAL_UTIL) $(SERIAL_LINK) $(LDFLAGS)
+
+%_mpi.o : %_mpi.F90
+	$(MPF90) $(F90FLAGS) $(INCLUDE) -c $<
+
+%_mpi.o : %_mpi.f90
+	$(MPF90) $(F90FLAGS) $(INCLUDE) -c $<
+
+%.o : %.F90
+	$(FC) $(F90FLAGS) $(INCLUDE) -c $<
+
+%.o : %.f90
+	$(FC) $(F90FLAGS) $(INCLUDE) -c $<
+
+%.o : %.c
+	$(CC) $(CFLAGS) $(INCLUDE) -c $<
+
+clean : 
+	$(RM) *~ *.o *.mod $(ALL_BINARIES)
